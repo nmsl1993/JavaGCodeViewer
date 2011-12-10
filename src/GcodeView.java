@@ -13,6 +13,9 @@ import com.sun.j3d.utils.universe.*;
 import javax.media.j3d.*;
 import javax.vecmath.*;
 import javax.swing.*;
+import javax.swing.filechooser.FileFilter;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
 import com.sun.j3d.utils.behaviors.mouse.*;
 import com.sun.j3d.utils.behaviors.keyboard.KeyNavigatorBehavior;
 import com.sun.j3d.utils.geometry.GeometryInfo;
@@ -36,17 +39,42 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	private Color3f white = new Color3f(1.0f, 1.0f, 1.0f);
 	private Color3f red = new Color3f(0.7f, .0f, .15f);
 	private Color3f green = new Color3f(0f, .7f, .15f);
-	private Color3f orange = new Color3f(Color.ORANGE);
+	private Color3f yellow = new Color3f(Color.YELLOW);
+	private Color3f blue = new Color3f(Color.BLUE);
+	private int maxLayer = 0;
+	private File fr = null;
+	private ArrayList<LineSegment> objCommands = new ArrayList<LineSegment>();
 	private static boolean debug = false;
 	protected SimpleUniverse u = null;
 	protected BranchGroup scene = null;
 	protected float eyeOffset =0.09F;
 	protected static int size=700;
 	public void init() {
+		JButton butt = new JButton("Open");
+		butt.setForeground(Color.black);
+		butt.addActionListener(new ActionListener()
+		{
+			public void actionPerformed(ActionEvent ae)
+			{
+				JFileChooser gcodeChooser = new JFileChooser();
+				FileFilter filter = new FileNameExtensionFilter("Gcode file", "gcode", "ngc");			
+				JFrame chooseFramer = new JFrame("Select Gcode...");
+				gcodeChooser.setFileFilter(filter);
+				gcodeChooser.showOpenDialog(chooseFramer);
+				fr = gcodeChooser.getSelectedFile();
+			System.out.println(fr.getPath());
+				readGcode();
+				
+			}
+		});
+	    this.add(butt);
+
+		
 		setLayout(new FlowLayout());
+		/*
 		GraphicsConfiguration config =
 			SimpleUniverse.getPreferredConfiguration();
-
+*/
 		c1.setSize(size, size);
 		add(c1);
 		JButton zoomIn = new JButton("Zoom In");
@@ -55,11 +83,11 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				cameraTranslation.z += 10f;
-				updateZoom();
-				
+				//cameraTranslation.z += 10f;
+				updateZoom(10f);
+
 			}
-			
+
 		});
 		add(zoomIn);
 		JButton zoomOut = new JButton("Zoom Out");
@@ -68,56 +96,63 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				cameraTranslation.z -= 10f;
-				updateZoom();
-				
+				//cameraTranslation.z -= 10f;
+				updateZoom(-10f);
+
 			}
-			
+
 		});
 		add(zoomOut);
 
+		
+
+	}
+	private void readGcode()
+	{
+		System.out.println("trying to obj");
+		GcodeViewParse gcvp = new GcodeViewParse();
+		ArrayList<String> gcodeText = readFiletoArrayList(fr);
+		objCommands = (gcvp.toObj(gcodeText));
+		maxLayer = objCommands.get(objCommands.size() - 1).getLayer();
+		draw();
+	}
+	private void draw()
+	{
+		//destroy();
 		scene = createSceneGraph(0);
 		u = new SimpleUniverse(c1);
 		// This will move the ViewPlatform back a bit so the
 		// objects in the scene can be viewed.
 		u.getViewingPlatform().setNominalViewingTransform();
 		u.addBranchGraph(scene);
-
-
 	}
-	private void updateZoom() {
+	private void updateZoom(float f) {
 		System.out.println("zoom updating");
 		TransformGroup viewTG = u.getViewingPlatform().getViewPlatformTransform();
 		Transform3D trans = new Transform3D();
-		Transform3D t3d = new Transform3D();
+		//Transform3D t3d = new Transform3D();
 		//t3d.mul(cameraTranslation);fa
+		cameraTranslation.z += f;
 		trans.setTranslation(cameraTranslation);
-		
+
 		viewTG.setTransform(trans);
 
 
 	}
-	public Group createLines() {
-
-		ArrayList<LineSegment> objCommands = new ArrayList<LineSegment>();
-		Group gp = new Group();
-		System.out.println("trying to obj");
-		GcodeViewParse gcvp = new GcodeViewParse();
-		ArrayList<String> gcodeText = readFiletoArrayList(new File("/home/noah/Downloads/filament_holder.gcode"));
-		objCommands = (gcvp.toObj(gcodeText));
-
+	private LineAttributes getLA()
+	{
 		LineAttributes laA = new LineAttributes();
-		laA.setLineWidth(1.0f);
+		laA.setLineWidth(0.6f);
 		laA.setLinePattern(LineAttributes.PATTERN_SOLID);
-
-
+		return laA;
+	}
+	private Appearance getColoredAppearance(Color3f col)
+	{
 		Appearance ap = new Appearance();
-		ap.setColoringAttributes(new ColoringAttributes(red, ColoringAttributes.SHADE_FLAT)); 
-		ap.setLineAttributes(laA);
+		ap.setColoringAttributes(new ColoringAttributes(col, ColoringAttributes.FASTEST)); 
+		ap.setLineAttributes(getLA());
 
-		ap.setMaterial(new Material(green,black, green, black, 1.0f));
-
-		float transparencyValue = 0.5f;
+		float transparencyValue = 0.6f;
 		TransparencyAttributes t_attr =
 			new TransparencyAttributes(
 					TransparencyAttributes.BLENDED,
@@ -126,17 +161,73 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 					TransparencyAttributes.BLEND_ONE);
 		ap.setTransparencyAttributes( t_attr );
 		ap.setRenderingAttributes( new RenderingAttributes() );
+		return ap;
+		
+	}
+	public Group[] createLines() {
 
 
+		System.out.println("1");
+		Group[] gp = new Group[maxLayer + 1];
+		int curLayer = -1;
+
+		
+
+
+		
+		int colIterate = 0;
+		
 		for(LineSegment ls : objCommands)
 		{
-		Shape3D plShape = new Shape3D(); 
-		Point3f[] plaPts = ls.getPointArray();
-		LineArray pla = new LineArray(2, LineArray.COORDINATES);
-		pla.setCoordinates(0, plaPts);
-		plShape.setGeometry(pla);
-		plShape.setAppearance(ap);
-		gp.addChild(plShape);
+			
+
+			Shape3D plShape = new Shape3D(); 
+			Point3f[] plaPts = ls.getPointArray();
+			LineArray pla = new LineArray(2, LineArray.COORDINATES);
+			pla.setCoordinates(0, plaPts);
+			plShape.setGeometry(pla);
+			
+			/*
+			switch (colIterate)
+			{
+			case 0: plShape.setAppearance(getColoredAppearance(red)); break;
+			case 1:  plShape.setAppearance(getColoredAppearance(green)); break;
+            case 2:  plShape.setAppearance(getColoredAppearance(blue)); break;
+			}
+            colIterate++;
+
+            if(colIterate > 2) {colIterate = 0;}
+            */
+			if(!ls.getExtruding())
+			{
+				plShape.setAppearance(getColoredAppearance(green));
+			}
+			if(ls.getExtruding())
+			{
+				if(ls.getSpeed() > 700)
+				{
+				plShape.setAppearance(getColoredAppearance(blue));
+				}
+				else if(ls.getSpeed() > 2100)
+				{
+				plShape.setAppearance(getColoredAppearance(yellow));
+				}
+				else
+				{
+				plShape.setAppearance(getColoredAppearance(red));
+				}
+				
+			}
+			
+			if(ls.getLayer() != curLayer)
+			{
+				
+				curLayer = ls.getLayer();
+				gp[curLayer] = new Group();
+				System.out.println("5");
+
+			}
+			gp[curLayer].addChild(plShape);
 		}
 		return gp;
 
@@ -163,12 +254,14 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			TransformGroup mytg = new TransformGroup(myTrans);
 
 
-			
+
 			// bg.addChild(ap);
 
-			Group lines3D = createLines();
-		
-			mytg.addChild(lines3D);
+			Group[] lines3D = createLines();
+			for(Group curGp : lines3D)
+			{
+			mytg.addChild(curGp);
+			}
 			tg.addChild(mytg);
 
 			//objTrans.addChild(createPyramid());
@@ -206,63 +299,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		} catch(Throwable t){System.out.println("Error: "+t);}
 		return objRoot;
 	}
-	public Shape3D createPyramid()
-	{
-		Point3f e = new Point3f(1.0f, 0.0f, 0.0f); // east
-		Point3f s = new Point3f(0.0f, 0.0f, 1.0f); // south
-		Point3f w = new Point3f(-1.0f, 0.0f, 0.0f); // west
-		Point3f n = new Point3f(0.0f, 0.0f, -1.0f); // north
-		Point3f t = new Point3f(0.0f, 0.721f, 0.0f); // top
-
-		TriangleArray pyramidGeometry = new TriangleArray(18,
-				TriangleArray.COORDINATES);
-		pyramidGeometry.setCoordinate(0, e);
-		pyramidGeometry.setCoordinate(1, t);
-		pyramidGeometry.setCoordinate(2, s);
-
-		pyramidGeometry.setCoordinate(3, s);
-		pyramidGeometry.setCoordinate(4, t);
-		pyramidGeometry.setCoordinate(5, w);
-
-		pyramidGeometry.setCoordinate(6, w);
-		pyramidGeometry.setCoordinate(7, t);
-		pyramidGeometry.setCoordinate(8, n);
-
-		pyramidGeometry.setCoordinate(9, n);
-		pyramidGeometry.setCoordinate(10, t);
-		pyramidGeometry.setCoordinate(11, e);
-
-		pyramidGeometry.setCoordinate(12, e);
-		pyramidGeometry.setCoordinate(13, s);
-		pyramidGeometry.setCoordinate(14, w);
-
-		pyramidGeometry.setCoordinate(15, w);
-		pyramidGeometry.setCoordinate(16, n);
-		pyramidGeometry.setCoordinate(17, e);
-		GeometryInfo geometryInfo = new GeometryInfo(pyramidGeometry);
-		NormalGenerator ng = new NormalGenerator();
-		ng.generateNormals(geometryInfo);
-
-		GeometryArray result = geometryInfo.getGeometryArray();
-
-		// yellow appearance
-		Appearance appearance = new Appearance();
-		Color3f color = new Color3f(Color.yellow);
-		Color3f black = new Color3f(0.0f, 0.0f, 0.0f);
-		Color3f white = new Color3f(1.0f, 1.0f, 1.0f);
-		Texture texture = new Texture2D();
-		TextureAttributes texAttr = new TextureAttributes();
-		texAttr.setTextureMode(TextureAttributes.MODULATE);
-		texture.setBoundaryModeS(Texture.WRAP);
-		texture.setBoundaryModeT(Texture.WRAP);
-		texture.setBoundaryColor(new Color4f(0.0f, 1.0f, 0.0f, 0.0f));
-		Material mat = new Material(color, black, color, white, 70f);
-		appearance.setTextureAttributes(texAttr);
-		appearance.setMaterial(mat);
-		appearance.setTexture(texture);
-		Shape3D shape = new Shape3D(result, appearance);
-		return shape;
-	}
+	
 	public GcodeView() {
 	}
 	public void destroy() {
@@ -295,25 +332,26 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	public void mouseWheelMoved(MouseWheelEvent arg0) {
 		System.out.println("wheel rolling");
 		int notches = arg0.getWheelRotation();
-		cameraTranslation.z = (10f * notches);
-		updateZoom();
+		float zChange = (10f * notches);
+		updateZoom(zChange);
 
 	}
 	@Override
 	public void keyPressed(KeyEvent e) {
-		
+
 	}
 	@Override
 	public void keyReleased(KeyEvent e) {
 		System.out.println("camTrans = " + cameraTranslation.z);
 		if(e.getKeyChar() == '-')
 		{
-			cameraTranslation.z -= 10f;
-
+			//cameraTranslation.z -= 10f;
+			updateZoom(-10f);
 		}
 		else if(e.getKeyChar() == '=')
 		{
-			cameraTranslation.z = cameraTranslation.z + 10f;
+			//cameraTranslation.z =+ 10f;
+			updateZoom(10f);
 
 		}
 		else if(e.getKeyChar() == 'w')
@@ -336,7 +374,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			cameraTranslation.y += 10f;
 
 		}
-		updateZoom();
+		
 
 	}
 	@Override

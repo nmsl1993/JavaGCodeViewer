@@ -17,12 +17,23 @@ public class GcodeViewParse {
 		float speed = 2; //DEFAULTS to 2
 		Point3f lastPoint = null;
 		Point3f curPoint = null;
-		int curLayer = 1;
+		int curLayer = 0;
 		float parsedX, parsedY, parsedZ, parsedF;
 		float tolerance = .0002f;
 		ArrayList<LineSegment> lines = new ArrayList<LineSegment>();
 		float[] lastCoord = { 0.0f, 0.0f, 0.0f};
+		boolean currentExtruding = false;
 		for(String s : gcode)
+		{
+			if(s.matches(".*M101.*"))
+			{
+				currentExtruding = true;
+			}
+			if(s.matches(".*M103.*"))
+			{
+				currentExtruding = false;
+			}
+
 			if (s.matches(".*G1.*")) 
 			{
 				String[] sarr = s.split(" ");
@@ -30,7 +41,7 @@ public class GcodeViewParse {
 				parsedY = parseCoord(sarr, 'Y');
 				parsedZ = parseCoord(sarr, 'Z');
 				parsedF = parseCoord(sarr, 'F');
-				
+
 				//System.out.println(Arrays.toString(sarr));
 				if(!Float.isNaN(parsedX))
 				{
@@ -63,17 +74,19 @@ public class GcodeViewParse {
 
 					if(lastPoint != null)
 					{
-					
-					lines.add(new LineSegment(lastPoint, curPoint, curLayer, speed));
+
+						lines.add(new LineSegment(lastPoint, curPoint, curLayer, speed, currentExtruding));
 					}
 					lastPoint = curPoint;
 				}
 			}
 
-		System.out.println(lines.size());
+			System.out.println(lines.size());
+		}
 		return lines;
 
 	}
+
 
 	private float parseCoord(String[] sarr, char c)
 	{
