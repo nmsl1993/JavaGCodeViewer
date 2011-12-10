@@ -28,10 +28,10 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	protected Canvas3D c1 = new Canvas3D(SimpleUniverse.getPreferredConfiguration());
 	// private Canvas3D c2 = new Canvas3D(SimpleUniverse.getPreferredConfiguration());
 	private static MainFrame mf;
-	
+
 	private final static Vector3f CAMERA_TRANSLATION_DEFAULT = new Vector3f(+0.0f,-0.15f,-3.6f);
 	private Vector3f cameraTranslation = new Vector3f(CAMERA_TRANSLATION_DEFAULT);
-	
+
 	private Color3f black = new Color3f(0.0f, 0.0f, 0.0f);
 	private Color3f white = new Color3f(1.0f, 1.0f, 1.0f);
 	private Color3f red = new Color3f(0.7f, .0f, .15f);
@@ -49,49 +49,96 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 
 		c1.setSize(size, size);
 		add(c1);
-		
-		
+		JButton zoomIn = new JButton("Zoom In");
+		zoomIn.addActionListener(new ActionListener()
+		{
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				cameraTranslation.z += 10f;
+				updateZoom();
+				
+			}
+			
+		});
+		add(zoomIn);
+		JButton zoomOut = new JButton("Zoom Out");
+		zoomOut.addActionListener(new ActionListener()
+		{
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				cameraTranslation.z -= 10f;
+				updateZoom();
+				
+			}
+			
+		});
+		add(zoomOut);
+
 		scene = createSceneGraph(0);
 		u = new SimpleUniverse(c1);
 		// This will move the ViewPlatform back a bit so the
 		// objects in the scene can be viewed.
 		u.getViewingPlatform().setNominalViewingTransform();
 		u.addBranchGraph(scene);
-	
+
 
 	}
 	private void updateZoom() {
 		System.out.println("zoom updating");
 		TransformGroup viewTG = u.getViewingPlatform().getViewPlatformTransform();
 		Transform3D trans = new Transform3D();
+		Transform3D t3d = new Transform3D();
+		//t3d.mul(cameraTranslation);
 		trans.setTranslation(cameraTranslation);
+		
 		viewTG.setTransform(trans);
 
-		
+
 	}
-	public Shape3D createLines() {
+	public Group createLines() {
 
 		ArrayList<LineSegment> objCommands = new ArrayList<LineSegment>();
-		
+		Group gp = new Group();
 		System.out.println("trying to obj");
 		GcodeViewParse gcvp = new GcodeViewParse();
 		ArrayList<String> gcodeText = readFiletoArrayList(new File("/home/noah/Downloads/filament_holder.gcode"));
 		objCommands = (gcvp.toObj(gcodeText));
-		
-		Shape3D plShape = new Shape3D(); 
-		   
-		plShape.removeGeometry(0);  
-		 
+
+		LineAttributes laA = new LineAttributes();
+		laA.setLineWidth(1.0f);
+		laA.setLinePattern(LineAttributes.PATTERN_SOLID);
+
+
+		Appearance ap = new Appearance();
+		ap.setColoringAttributes(new ColoringAttributes(red, ColoringAttributes.SHADE_FLAT)); 
+		ap.setLineAttributes(laA);
+
+		ap.setMaterial(new Material(green,black, green, black, 1.0f));
+
+		float transparencyValue = 0.5f;
+		TransparencyAttributes t_attr =
+			new TransparencyAttributes(
+					TransparencyAttributes.BLENDED,
+					transparencyValue,
+					TransparencyAttributes.BLEND_SRC_ALPHA,
+					TransparencyAttributes.BLEND_ONE);
+		ap.setTransparencyAttributes( t_attr );
+		ap.setRenderingAttributes( new RenderingAttributes() );
+
+
 		for(LineSegment ls : objCommands)
 		{
+		Shape3D plShape = new Shape3D(); 
 		Point3f[] plaPts = ls.getPointArray();
 		LineArray pla = new LineArray(2, LineArray.COORDINATES);
 		pla.setCoordinates(0, plaPts);
-		plShape.addGeometry(pla);
+		plShape.setGeometry(pla);
+		gp.addChild(plShape);
 		}
-		System.out.println("plShape geos" + plShape.numGeometries());
-		return plShape;
-		
+		return gp;
+
 
 	}
 	public BranchGroup createSceneGraph(int i) {
@@ -113,32 +160,13 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			Transform3D myTrans = new Transform3D();
 			myTrans.setTranslation(new Vector3f(eyeOffset, -eyeOffset, 0F));
 			TransformGroup mytg = new TransformGroup(myTrans);
+
+
 			
-		
-			LineAttributes laA = new LineAttributes();
-			laA.setLineWidth(1.0f);
-			laA.setLinePattern(LineAttributes.PATTERN_SOLID);
-			
-
-			Appearance ap = new Appearance();
-			ap.setColoringAttributes(new ColoringAttributes(red, ColoringAttributes.SHADE_FLAT)); 
-			ap.setLineAttributes(laA);
-
-			ap.setMaterial(new Material(green,black, green, black, 1.0f));
-
-			float transparencyValue = 0.5f;
-			TransparencyAttributes t_attr =
-				new TransparencyAttributes(
-						TransparencyAttributes.BLENDED,
-						transparencyValue,
-						TransparencyAttributes.BLEND_SRC_ALPHA,
-						TransparencyAttributes.BLEND_ONE);
-			ap.setTransparencyAttributes( t_attr );
-			ap.setRenderingAttributes( new RenderingAttributes() );
 			// bg.addChild(ap);
-			
-			Shape3D lines3D = createLines();
-			lines3D.setAppearance(ap);
+
+			Group lines3D = createLines();
+		
 			mytg.addChild(lines3D);
 			tg.addChild(mytg);
 
@@ -215,7 +243,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		ng.generateNormals(geometryInfo);
 
 		GeometryArray result = geometryInfo.getGeometryArray();
-		
+
 		// yellow appearance
 		Appearance appearance = new Appearance();
 		Color3f color = new Color3f(Color.yellow);
@@ -268,52 +296,52 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		int notches = arg0.getWheelRotation();
 		cameraTranslation.z = (10f * notches);
 		updateZoom();
-		
+
 	}
 	@Override
 	public void keyPressed(KeyEvent e) {
+		
+	}
+	@Override
+	public void keyReleased(KeyEvent e) {
 		System.out.println("camTrans = " + cameraTranslation.z);
 		if(e.getKeyChar() == '-')
 		{
 			cameraTranslation.z -= 10f;
-			
+
 		}
 		else if(e.getKeyChar() == '=')
 		{
-			cameraTranslation.z += 10f;
-			
+			cameraTranslation.z = cameraTranslation.z + 10f;
+
 		}
 		else if(e.getKeyChar() == 'w')
 		{
 			cameraTranslation.y += 10f;
-			
+
 		}
 		else if(e.getKeyChar() == 's')
 		{
 			cameraTranslation.y += 10f;
-			
+
 		}
 		else if(e.getKeyChar() == 'a')
 		{
 			cameraTranslation.y += 10f;
-			
+
 		}
 		else if(e.getKeyChar() == 'd')
 		{
 			cameraTranslation.y += 10f;
-			
+
 		}
 		updateZoom();
-	}
-	@Override
-	public void keyReleased(KeyEvent e) {
-		// TODO Auto-generated method stub
-		
+
 	}
 	@Override
 	public void keyTyped(KeyEvent e) {
 		// TODO Auto-generated method stub
-		
+
 	}
-	
+
 }
