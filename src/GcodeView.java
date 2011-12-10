@@ -90,7 +90,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		TransformGroup viewTG = u.getViewingPlatform().getViewPlatformTransform();
 		Transform3D trans = new Transform3D();
 		Transform3D t3d = new Transform3D();
-		//t3d.mul(cameraTranslation);
+		//t3d.mul(cameraTranslation);fa
 		trans.setTranslation(cameraTranslation);
 		
 		viewTG.setTransform(trans);
@@ -135,6 +135,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		LineArray pla = new LineArray(2, LineArray.COORDINATES);
 		pla.setCoordinates(0, plaPts);
 		plShape.setGeometry(pla);
+		plShape.setAppearance(ap);
 		gp.addChild(plShape);
 		}
 		return gp;
