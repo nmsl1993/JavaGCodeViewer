@@ -70,6 +70,10 @@ public class LineSegment {
 		Point3f[] pointarr = { first, second };
 		return pointarr;
 	}
+	public int getToolhead()
+	{
+		return toolhead;
+	}
 	public float getSpeed()
 	{
 		return speed;

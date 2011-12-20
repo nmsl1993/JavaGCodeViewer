@@ -3,11 +3,12 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6">
 		<attributes>
-			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="JavaGcodeViewer/windows/dist"/>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="JavaGcodeViewer/linux"/>
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="j3dcore.jar"/>
 	<classpathentry kind="lib" path="j3dutils.jar"/>
 	<classpathentry kind="lib" path="vecmath.jar"/>
+	<classpathentry kind="lib" path="miglayout-3.7.4.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

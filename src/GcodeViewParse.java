@@ -18,6 +18,7 @@ public class GcodeViewParse {
 		Point3f lastPoint = null;
 		Point3f curPoint = null;
 		int curLayer = 0;
+		int curToolhead = 0;
 		float parsedX, parsedY, parsedZ, parsedF;
 		float tolerance = .0002f;
 		ArrayList<LineSegment> lines = new ArrayList<LineSegment>();
@@ -33,7 +34,14 @@ public class GcodeViewParse {
 			{
 				currentExtruding = false;
 			}
-
+			if(s.matches(".*T0.*"))
+			{
+				curToolhead = 0;
+			}
+			if(s.matches(".*T1.*"))
+			{
+				curToolhead = 1;
+			}
 			if (s.matches(".*G1.*")) 
 			{
 				String[] sarr = s.split(" ");
@@ -75,13 +83,12 @@ public class GcodeViewParse {
 					if(lastPoint != null)
 					{
 
-						lines.add(new LineSegment(lastPoint, curPoint, curLayer, speed, currentExtruding));
+						lines.add(new LineSegment(lastPoint, curPoint, curLayer, speed, curToolhead, currentExtruding));
 					}
 					lastPoint = curPoint;
 				}
 			}
 
-			System.out.println(lines.size());
 		}
 		return lines;
 

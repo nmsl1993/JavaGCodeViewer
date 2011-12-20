@@ -1,5 +1,6 @@
 import java.applet.Applet;
 import java.awt.Color;
+import java.awt.Container;
 import java.awt.FlowLayout;
 import java.awt.event.*;
 import java.awt.GraphicsConfiguration;
@@ -13,8 +14,12 @@ import com.sun.j3d.utils.universe.*;
 import javax.media.j3d.*;
 import javax.vecmath.*;
 import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
+
+import net.miginfocom.swing.MigLayout;
 
 import com.sun.j3d.utils.behaviors.mouse.*;
 import com.sun.j3d.utils.behaviors.keyboard.KeyNavigatorBehavior;
@@ -26,32 +31,60 @@ import com.sun.j3d.loaders.Scene;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.Enumeration;
-public class GcodeView extends Applet implements MouseWheelListener, KeyListener{
+import java.util.List;
+public class GcodeView extends Applet implements MouseWheelListener, ChangeListener{
 
+	// Remember to comment thiss Noah!!!
 	protected Canvas3D c1 = new Canvas3D(SimpleUniverse.getPreferredConfiguration());
 	// private Canvas3D c2 = new Canvas3D(SimpleUniverse.getPreferredConfiguration());
 	private static MainFrame mf;
 
-	private final static Vector3f CAMERA_TRANSLATION_DEFAULT = new Vector3f(+0.0f,-0.15f,-3.6f);
+	private final Vector3f CAMERA_TRANSLATION_DEFAULT = new Vector3f(+0.0f,-0.15f,-3.6f);
 	private Vector3f cameraTranslation = new Vector3f(CAMERA_TRANSLATION_DEFAULT);
 
+
+	private final int LOW_SPEED = 700;
+	private final int MEDIUM_SPEED = 1400;
+	private final int HIGH_SPEED = 1900;
 	private Color3f black = new Color3f(0.0f, 0.0f, 0.0f);
 	private Color3f white = new Color3f(1.0f, 1.0f, 1.0f);
 	private Color3f red = new Color3f(0.7f, .0f, .15f);
 	private Color3f green = new Color3f(0f, .7f, .15f);
-	private Color3f yellow = new Color3f(Color.YELLOW);
+	private Color3f orange = new Color3f(Color.ORANGE);
 	private Color3f blue = new Color3f(Color.BLUE);
 	private int maxLayer = 0;
+
+	JCheckBox dualExtrusionColoring;
 	private File fr = null;
 	private ArrayList<LineSegment> objCommands = new ArrayList<LineSegment>();
-	private static boolean debug = false;
+
+	///////ADMIN BOX//////////////////////////////////////////////////////////////
+	//
+	private static boolean debug = false;										//
+	private static final boolean ADMIN_MODE = true;								//
+	//////////////////////////////////////////////////////////////////////////////
+
+	private final int SLIDER_MIN = 0;
+	private final int SLIDER_MAX = 100;
+	private final int SLIDER_INIT = SLIDER_MAX;    //initial frames per second
+
 	protected SimpleUniverse u = null;
 	protected BranchGroup scene = null;
 	protected float eyeOffset =0.09F;
-	protected static int size=700;
-	public void init() {
+	protected static int xsize=850, ysize = 500;
+
+
+	public void init() 
+	{
+		this.setLayout(new MigLayout());
+		this.setSize(xsize*4/5,ysize);
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+
+		}
 		JButton butt = new JButton("Open");
-		butt.setForeground(Color.black);
 		butt.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent ae)
@@ -62,21 +95,43 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 				gcodeChooser.setFileFilter(filter);
 				gcodeChooser.showOpenDialog(chooseFramer);
 				fr = gcodeChooser.getSelectedFile();
-			System.out.println(fr.getPath());
+				System.out.println(fr.getPath());
 				readGcode();
-				
+
 			}
 		});
-	    this.add(butt);
+		this.add(butt, "split");
+		if(ADMIN_MODE)
+		{
+			JButton reDraw = new JButton("ReDraw");
+			reDraw.addActionListener(new ActionListener()
+			{
 
-		
-		setLayout(new FlowLayout());
+				@Override
+				public void actionPerformed(ActionEvent arg0) {
+					draw();
+
+				}
+
+			});
+			this.add(reDraw, "split");
+		}
+		JLabel dualQuestion = new JLabel("Enable Dual Extrusion Coloring?");
+		this.add(dualQuestion, "split");
+		dualExtrusionColoring = new JCheckBox();
+		this.add(dualExtrusionColoring, "wrap");
 		/*
 		GraphicsConfiguration config =
 			SimpleUniverse.getPreferredConfiguration();
-*/
-		c1.setSize(size, size);
-		add(c1);
+		 */
+		c1.setSize(xsize, ysize);
+		this.add(c1, "split");
+		JSlider jaSlide = new JSlider(JSlider.VERTICAL,
+				SLIDER_MIN, SLIDER_MAX, SLIDER_INIT);
+		jaSlide.addChangeListener(this);
+		add(jaSlide, "split");
+		Container zoomBox = new Container();
+		zoomBox.setLayout(new MigLayout());
 		JButton zoomIn = new JButton("Zoom In");
 		zoomIn.addActionListener(new ActionListener()
 		{
@@ -89,7 +144,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			}
 
 		});
-		add(zoomIn);
+		zoomBox.add(zoomIn, "wrap");
 		JButton zoomOut = new JButton("Zoom Out");
 		zoomOut.addActionListener(new ActionListener()
 		{
@@ -102,10 +157,66 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			}
 
 		});
-		add(zoomOut);
+		zoomBox.add(zoomOut, "wrap");
+		add(zoomBox, "wrap");
+		add(panButtons(), "center");
+		u = new SimpleUniverse(c1);
+		//this.validate();
 
-		
+	}
+	private Container panButtons()
+	{
+		Container c = new Container();
+		c.setLayout(new MigLayout());
+		JButton left = new JButton("Pan Left");
+		left.addActionListener(new ActionListener()
+		{
 
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				updatePan(-5f, 0f);
+
+			}
+
+		});
+		JButton right = new JButton("Pan Right");
+		right.addActionListener(new ActionListener()
+		{
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				updatePan(5f, 0f);
+
+			}
+
+		});
+		JButton up = new JButton("Pan Up");
+		up.addActionListener(new ActionListener()
+		{
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				updatePan(0f, 5f);
+
+			}
+
+		});
+		JButton down = new JButton("Pan Down");
+		down.addActionListener(new ActionListener()
+		{
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				updatePan(0f, -5f);
+
+			}
+
+		});
+		c.add(up, "wrap");
+		c.add(left, "split");
+		c.add(right, "gapleft 20, wrap");
+		c.add(down, "wrap");
+		return c;
 	}
 	private void readGcode()
 	{
@@ -118,15 +229,30 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	}
 	private void draw()
 	{
-		//destroy();
+		if(scene != null)
+		{
+			u.getLocale().removeBranchGraph(scene);
+		}
+		//u = new SimpleUniverse(c1);
+		System.out.println("num bgs" + u.getLocale().numBranchGraphs());
+		/*
+		if(u.getLocale().numBranchGraphs() > 1)
+		{
+			List<BranchGroup> bgrl = (List) u.getLocale().getAllBranchGraphs();
+
+			u.getLocale().removeBranchGraph(bgrl.get(0));
+		}
+		 */
+		System.out.println(u.numLocales());
 		scene = createSceneGraph(0);
-		u = new SimpleUniverse(c1);
 		// This will move the ViewPlatform back a bit so the
 		// objects in the scene can be viewed.
 		u.getViewingPlatform().setNominalViewingTransform();
 		u.addBranchGraph(scene);
+
 	}
 	private void updateZoom(float f) {
+
 		System.out.println("zoom updating");
 		TransformGroup viewTG = u.getViewingPlatform().getViewPlatformTransform();
 		Transform3D trans = new Transform3D();
@@ -137,7 +263,18 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 
 		viewTG.setTransform(trans);
 
+	}
+	private void updatePan(float deltaX, float deltaY)
+	{
+		TransformGroup viewTG = u.getViewingPlatform().getViewPlatformTransform();
+		Transform3D trans = new Transform3D();
 
+		cameraTranslation.x += deltaX;
+		cameraTranslation.y += deltaY;
+
+		trans.setTranslation(cameraTranslation);
+
+		viewTG.setTransform(trans);
 	}
 	private LineAttributes getLA()
 	{
@@ -148,45 +285,50 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	}
 	private Appearance getColoredAppearance(Color3f col)
 	{
+		float transparencyValue = 0.3f;
+		return getColoredAppearance(col, transparencyValue);
+	}
+	private Appearance getColoredAppearance(Color3f col, float transparency)
+	{
 		Appearance ap = new Appearance();
 		ap.setColoringAttributes(new ColoringAttributes(col, ColoringAttributes.FASTEST)); 
 		ap.setLineAttributes(getLA());
 
-		float transparencyValue = 0.6f;
+
 		TransparencyAttributes t_attr =
-			new TransparencyAttributes(
-					TransparencyAttributes.BLENDED,
-					transparencyValue,
-					TransparencyAttributes.BLEND_SRC_ALPHA,
-					TransparencyAttributes.BLEND_ONE);
+				new TransparencyAttributes(
+						TransparencyAttributes.BLENDED,
+						transparency,
+						TransparencyAttributes.BLEND_SRC_ALPHA,
+						TransparencyAttributes.BLEND_ONE);
 		ap.setTransparencyAttributes( t_attr );
 		ap.setRenderingAttributes( new RenderingAttributes() );
 		return ap;
-		
+
 	}
 	public Group[] createLines() {
 
 
-		System.out.println("1");
+		System.out.println("creatingLines");
 		Group[] gp = new Group[maxLayer + 1];
 		int curLayer = -1;
 
-		
 
 
-		
+
+
 		int colIterate = 0;
-		
+
 		for(LineSegment ls : objCommands)
 		{
-			
+
 
 			Shape3D plShape = new Shape3D(); 
 			Point3f[] plaPts = ls.getPointArray();
 			LineArray pla = new LineArray(2, LineArray.COORDINATES);
 			pla.setCoordinates(0, plaPts);
 			plShape.setGeometry(pla);
-			
+
 			/*
 			switch (colIterate)
 			{
@@ -197,34 +339,53 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
             colIterate++;
 
             if(colIterate > 2) {colIterate = 0;}
-            */
+			 */
 			if(!ls.getExtruding())
 			{
-				plShape.setAppearance(getColoredAppearance(green));
+				plShape.setAppearance(getColoredAppearance(white));
 			}
-			if(ls.getExtruding())
+			if(!dualExtrusionColoring.isSelected())
 			{
-				if(ls.getSpeed() > 700)
+				if(ls.getExtruding())
 				{
-				plShape.setAppearance(getColoredAppearance(blue));
+					if(ls.getSpeed() > LOW_SPEED && ls.getSpeed() < MEDIUM_SPEED)
+					{
+						plShape.setAppearance(getColoredAppearance(green));
+					}
+					if(ls.getSpeed() > MEDIUM_SPEED && ls.getSpeed() < HIGH_SPEED)
+					{
+						plShape.setAppearance(getColoredAppearance(blue));
+					}
+					else if(ls.getSpeed() >= HIGH_SPEED)
+					{
+						plShape.setAppearance(getColoredAppearance(orange));
+					}
+					else //Very low speed....
+					{
+						plShape.setAppearance(getColoredAppearance(red));
+					}
 				}
-				else if(ls.getSpeed() > 2100)
-				{
-				plShape.setAppearance(getColoredAppearance(yellow));
-				}
-				else
-				{
-				plShape.setAppearance(getColoredAppearance(red));
-				}
-				
 			}
-			
+			if(dualExtrusionColoring.isSelected())
+			{
+				if(ls.getExtruding())
+				{
+					if(ls.getToolhead() == 0)
+					{
+						plShape.setAppearance(getColoredAppearance(blue));
+					}
+					if(ls.getToolhead() == 1)
+					{
+						plShape.setAppearance(getColoredAppearance(orange));
+					}
+				}
+			}
 			if(ls.getLayer() != curLayer)
 			{
-				
+
 				curLayer = ls.getLayer();
 				gp[curLayer] = new Group();
-				System.out.println("5");
+
 
 			}
 			gp[curLayer].addChild(plShape);
@@ -243,6 +404,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			myTransform3D.setTranslation(cameraTranslation);
 			TransformGroup objTrans = new TransformGroup(myTransform3D);
 			objTrans.setCapability(TransformGroup.ALLOW_TRANSFORM_WRITE);
+			objTrans.setCapability(TransformGroup.ALLOW_TRANSFORM_READ);
 			Transform3D t = new Transform3D();
 			TransformGroup tg = new TransformGroup(t);
 			tg.setCapability(TransformGroup.ALLOW_TRANSFORM_READ);
@@ -256,17 +418,17 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 
 
 			// bg.addChild(ap);
-
+			tg.removeAllChildren();
 			Group[] lines3D = createLines();
 			for(Group curGp : lines3D)
 			{
-			mytg.addChild(curGp);
+				mytg.addChild(curGp);
 			}
 			tg.addChild(mytg);
 
 			//objTrans.addChild(createPyramid());
 			BoundingSphere bounds =
-				new BoundingSphere(new Point3d(0.0,0.0,0.0), 100.0);
+					new BoundingSphere(new Point3d(0.0,0.0,0.0), 100.0);
 			Color3f light1Color = new Color3f(.9f, 0.9f, 0.9f);
 			Vector3f light1Direction  = new Vector3f(4.0f, -7.0f, -12.0f);
 			DirectionalLight light1
@@ -289,9 +451,13 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 			objTrans.addChild(behavior3);
 			behavior3.setSchedulingBounds(bounds);
 
+			BoundingSphere zoomSphere = new BoundingSphere(new Point3d(),1000.0d);
+			MouseWheelZoom mwz = new MouseWheelZoom(tg);
+			mwz.setSchedulingBounds(zoomSphere);
+			objTrans.addChild(mwz);
+
 			KeyNavigatorBehavior keyNavBeh = new KeyNavigatorBehavior(tg);
-			keyNavBeh.setSchedulingBounds(new BoundingSphere(
-					new Point3d(),1000.0));
+			keyNavBeh.setSchedulingBounds(zoomSphere);
 			objTrans.addChild(keyNavBeh);
 
 			behavior.setSchedulingBounds(bounds);
@@ -299,10 +465,11 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		} catch(Throwable t){System.out.println("Error: "+t);}
 		return objRoot;
 	}
-	
+
 	public GcodeView() {
 	}
-	public void destroy() {
+	public void destroy() 
+	{
 		u.removeAllLocales();
 	}
 	public static ArrayList<String> readFiletoArrayList(File f) {
@@ -326,7 +493,7 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 	public static void main(String[] args) {
 
 		GcodeView s = new GcodeView();
-		mf = new MainFrame(s, size, size);
+		//mf = new MainFrame(s, xsize, ysize);
 	}
 	@Override
 	public void mouseWheelMoved(MouseWheelEvent arg0) {
@@ -336,51 +503,14 @@ public class GcodeView extends Applet implements MouseWheelListener, KeyListener
 		updateZoom(zChange);
 
 	}
+
 	@Override
-	public void keyPressed(KeyEvent e) {
-
-	}
-	@Override
-	public void keyReleased(KeyEvent e) {
-		System.out.println("camTrans = " + cameraTranslation.z);
-		if(e.getKeyChar() == '-')
-		{
-			//cameraTranslation.z -= 10f;
-			updateZoom(-10f);
+	public void stateChanged(ChangeEvent ce) {
+		JSlider source = (JSlider)ce.getSource();
+		if (!source.getValueIsAdjusting()) {
+			int sliderVal = (int)source.getValue(); 
 		}
-		else if(e.getKeyChar() == '=')
-		{
-			//cameraTranslation.z =+ 10f;
-			updateZoom(10f);
-
-		}
-		else if(e.getKeyChar() == 'w')
-		{
-			cameraTranslation.y += 10f;
-
-		}
-		else if(e.getKeyChar() == 's')
-		{
-			cameraTranslation.y += 10f;
-
-		}
-		else if(e.getKeyChar() == 'a')
-		{
-			cameraTranslation.y += 10f;
-
-		}
-		else if(e.getKeyChar() == 'd')
-		{
-			cameraTranslation.y += 10f;
-
-		}
-		
-
-	}
-	@Override
-	public void keyTyped(KeyEvent e) {
-		// TODO Auto-generated method stub
-
 	}
 
 }
+
